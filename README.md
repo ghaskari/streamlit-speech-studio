@@ -1,7 +1,5 @@
 # 🎙️ streamlit-speech-studio
 
-# 🎙️ streamlit-speech-studio
-
 Multilingual MP3 Transcription + Text-to-Speech Tool
 Built with **Streamlit** for local use and **Gradio** for Google Colab compatibility.
 
