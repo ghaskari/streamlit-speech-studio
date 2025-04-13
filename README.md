@@ -62,12 +62,17 @@ Designed to be run **locally** on a personal machine with a graphical user inter
     - Choose language
     - Transcribe using Google’s speech recognition
     - Display transcription + download `.txt`
+
+![img.png](README_Directory/img.png)
+
 - **Tab 2: Text-to-Speech**
     - Input custom text
     - Choose voice (e.g. Persian, Arabic, English)
     - Generate `.mp3` using `edge-tts`
     - Playback audio + download file
-
+  
+![img_1.png](README_Directory/img_1.png)
+  
 ### ⚙️ How It Runs
 
 ```bash
