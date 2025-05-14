@@ -6,7 +6,6 @@ import speech_recognition as sr
 import asyncio
 import edge_tts
 
-# --- Voice Mapping ---
 VOICE_MAP = {
     "🇮🇷 Persian (fa)": "fa-IR-DilaraNeural",
     "🇺🇸 English (en)": "en-US-JennyNeural",
@@ -21,23 +20,25 @@ VOICE_MAP = {
 def extract_lang_code(voice_name):
     return "-".join(voice_name.split("-")[:2])
 
-def convert_mp3_to_wav(mp3_bytes):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as mp3_file:
-        mp3_file.write(mp3_bytes)
-        mp3_path = mp3_file.name
+def save_uploaded_file(uploaded_file):
+    suffix = os.path.splitext(uploaded_file.name)[1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        return tmp_file.name
 
-    wav_path = mp3_path.replace(".mp3", ".wav")
-    subprocess.run(["ffmpeg", "-y", "-i", mp3_path, "-ar", "16000", "-ac", "1", wav_path],
-                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+def convert_to_pcm_wav(input_path):
+    wav_path = os.path.splitext(input_path)[0] + "_converted.wav"
+    subprocess.run([
+        "ffmpeg", "-y", "-i", input_path,
+        "-ac", "1", "-ar", "16000", "-f", "wav", wav_path
+    ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return wav_path
 
-def transcribe_audio(audio_bytes, lang_code):
-    wav_path = convert_mp3_to_wav(audio_bytes)
-
+def transcribe_audio(file_path, lang_code):
+    pcm_wav_path = convert_to_pcm_wav(file_path)
     recognizer = sr.Recognizer()
-    with sr.AudioFile(wav_path) as source:
+    with sr.AudioFile(pcm_wav_path) as source:
         audio = recognizer.record(source)
-
     text = recognizer.recognize_google(audio, language=lang_code)
     return text
 
@@ -60,23 +61,25 @@ tab1, tab2 = st.tabs(["🗣️ Transcribe Audio", "🔊 Text to Speech"])
 
 # --- Transcription Tab ---
 with tab1:
-    st.header("Transcribe MP3 File")
+    st.header("Transcribe Audio File")
     lang_display = st.selectbox("Choose Language", list(VOICE_MAP.keys()), index=0)
-    uploaded_file = st.file_uploader("Upload an MP3 file", type=["mp3"])
+    uploaded_file = st.file_uploader("Upload an MP3 or WAV file", type=["mp3", "wav"])
 
     if uploaded_file:
-        try:
-            lang_code = extract_lang_code(VOICE_MAP[lang_display])
+        lang_code = extract_lang_code(VOICE_MAP[lang_display])
+        file_path = save_uploaded_file(uploaded_file)
+
+        if st.button("🎙️ Start Transcription"):
             with st.spinner("Transcribing..."):
-                text = transcribe_audio(uploaded_file.read(), lang_code)
+                text = transcribe_audio(file_path, lang_code)
+                st.session_state['transcription_text'] = text
 
-            st.text_area("Transcription Result", value=text, height=150)
-
-            st.download_button("📄 Download Transcription", text.encode("utf-8"),
-                               file_name="transcription.txt", mime="text/plain")
-
-        except Exception as e:
-            st.error(f"❌ Error during transcription: {e}")
+    # Show result if exists
+    if 'transcription_text' in st.session_state:
+        st.text_area("Transcription Result", value=st.session_state['transcription_text'], height=150)
+        st.download_button("📄 Download Transcription",
+                           st.session_state['transcription_text'].encode("utf-8"),
+                           file_name="transcription.txt", mime="text/plain")
 
 # --- TTS Tab ---
 with tab2:
@@ -85,13 +88,13 @@ with tab2:
     tts_lang = st.selectbox("Choose Voice", list(VOICE_MAP.keys()), index=0)
 
     if st.button("🎤 Generate Speech") and input_text.strip():
-        try:
-            with st.spinner("Generating MP3..."):
-                mp3_path = text_to_speech(input_text, VOICE_MAP[tts_lang])
+        with st.spinner("Generating MP3..."):
+            mp3_path = text_to_speech(input_text, VOICE_MAP[tts_lang])
+            st.session_state['tts_file'] = mp3_path
 
-            st.audio(mp3_path, format="audio/mp3")
-            with open(mp3_path, "rb") as f:
-                st.download_button("📥 Download MP3", f, file_name="output.mp3", mime="audio/mpeg")
-
-        except Exception as e:
-            st.error(f"❌ Error during TTS: {e}")
+    # Play and download if exists
+    if 'tts_file' in st.session_state and os.path.exists(st.session_state['tts_file']):
+        st.audio(st.session_state['tts_file'], format="audio/mp3")
+        with open(st.session_state['tts_file'], "rb") as f:
+            st.download_button("📥 Download MP3", f,
+                               file_name="output.mp3", mime="audio/mpeg")
