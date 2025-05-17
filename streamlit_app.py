@@ -37,10 +37,43 @@ def convert_to_pcm_wav(input_path):
 def transcribe_audio(file_path, lang_code):
     pcm_wav_path = convert_to_pcm_wav(file_path)
     recognizer = sr.Recognizer()
+
     with sr.AudioFile(pcm_wav_path) as source:
         audio = recognizer.record(source)
-    text = recognizer.recognize_google(audio, language=lang_code)
-    return text
+
+    # Split by silence (requires pydub)
+    from pydub import AudioSegment
+    from pydub.silence import split_on_silence
+
+    sound = AudioSegment.from_wav(pcm_wav_path)
+
+    # Split audio where silence is 700ms or more
+    chunks = split_on_silence(
+        sound,
+        min_silence_len=700,
+        silence_thresh=sound.dBFS - 14,
+        keep_silence=400
+    )
+
+    recognized_text = []
+    for i, chunk in enumerate(chunks):
+        chunk_silent_path = f"{pcm_wav_path}_chunk{i}.wav"
+        chunk.export(chunk_silent_path, format="wav")
+
+        with sr.AudioFile(chunk_silent_path) as source:
+            audio_chunk = recognizer.record(source)
+
+        try:
+            text = recognizer.recognize_google(audio_chunk, language=lang_code)
+            recognized_text.append(text)
+        except sr.UnknownValueError:
+            # Skip unrecognized chunks silently
+            continue
+        except sr.RequestError as e:
+            return f"[Google API error: {e}]"
+
+    return " ".join(recognized_text) if recognized_text else "[No speech could be recognized.]"
+
 
 def text_to_speech(text, voice_name):
     temp_dir = tempfile.mkdtemp()
